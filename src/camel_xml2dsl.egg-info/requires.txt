@@ -1,3 +1,0 @@
-ConfigArgParse
-rich
-lxml

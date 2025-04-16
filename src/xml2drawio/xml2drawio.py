@@ -6,7 +6,7 @@ import importlib.metadata
 import re
 import sys
 
-__version__ = importlib.metadata.version('camel-xml2dsl')
+__version__ = importlib.metadata.version('camel-xml2drawio')
 ns = {
     "camel": "http://camel.apache.org/schema/spring",
     "beans": "http://www.springframework.org/schema/beans"
@@ -28,7 +28,7 @@ class Converter:
 
     CLASS_TEMPLATE = '''
 ///////////////
-package xml2dsl;
+package xml2drawio;
 
 import org.apache.camel.ExchangePattern;
 import org.apache.camel.builder.RouteBuilder;
@@ -57,7 +57,7 @@ public class >>> class name <<< extends RouteBuilder {
         self.indentation = 2
         self.groovy_transformations = {}
 
-    def xml_to_dsl(self):
+    def xml_to_drawio(self):
         p = configargparse.ArgParser(
             description="Transforms xml routes to dsl routes " + __version__)
         p.add_argument('--xml', metavar='xml', type=str,
@@ -728,15 +728,9 @@ public class >>> class name <<< extends RouteBuilder {
 
 if __name__ == "__main__":
     converter = Converter()
-    converter.xml_to_dsl()
+    converter.xml_to_drawio()
 
 
 def main():
     converter = Converter()
-    converter.xml_to_dsl()
-
-
-
-#// {{body}} -> body()
-#// {{exception.*}} -> ${exception.*}
-#// to() containing "${}" expression -> toD()
+    converter.xml_to_drawio()

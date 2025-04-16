@@ -1,2 +1,0 @@
-[console_scripts]
-xml2dsl = xml2dsl.xml2dsl:main
