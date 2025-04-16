@@ -1,0 +1,63 @@
+Metadata-Version: 2.1
+Name: camel-xml2dsl
+Version: 0.0.25
+Summary: xml definition to dsl definition routes
+Home-page: https://github.com/jorgecastro05/script-aro.git
+Author: Jorge Castro
+Author-email: jorgecastro05@hotmail.com
+Project-URL: Bug Tracker, https://github.com/jorgecastro05/script-aro.git
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+License-File: LICENCE
+
+# XML to DSL route
+
+![Image!](https://i.imgur.com/rlcS3pw.png)
+
+## Installing the script:
+
+    pip install camel_xml2dsl-0.0.x-py3-none-any.whl
+
+Where x belongs to release version
+
+## Running the script
+
+    xml2dsl --xml xml_context_file.xml
+
+## Building the project (for developers)
+
+### Install dependencies
+    
+    python3 -m pip install --upgrade build
+    python -m build
+    
+build and install
+
+    python -m build && pip install dist/camel_xml2dsl-0.0.1-py3-none-any.whl --force-reinstall
+
+### Docker run 
+
+A dockerfile is provided for creating the app container image, can be used with docker or podman.
+
+Example with podman:
+
+    podman build -t xml2dsl .
+
+Example with docker
+
+    docker build -t xml2dsl .
+
+For run the app mount a volume where the xml is located and run the container in interactive mode:
+
+    podman run --privileged -it -v /home/user/Downloads/:/app:ro xml2dsl:latest /bin/bash
+
+    docker run -it -v /home/user/Downloads/:/app:ro xml2dsl:latest /bin/bash
+
+
+Then run the utility
+
+    xml2dsl --xml context.xml
+

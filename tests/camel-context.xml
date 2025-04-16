@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+    xmlns:ctx="http://www.springframework.org/schema/context"
+    xmlns:cxf="http://camel.apache.org/schema/cxf"
+    xmlns:jee="http://www.springframework.org/schema/jee"
+    xmlns:legdtl="http://www.lsb.de/apc/ops/legDetail"
+    xmlns:osgix="http://www.springframework.org/schema/osgi-compendium"
+    xmlns:trans="http://www.lsb.de/apc/ops/Transaction"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd http://camel.apache.org/schema/spring http://camel.apache.org/schema/spring/camel-spring.xsd         http://camel.apache.org/schema/cxf http://camel.apache.org/schema/cxf/camel-cxf.xsd         http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd         http://www.springframework.org/schema/jee http://www.springframework.org/schema/jee/spring-jee.xsd         http://www.springframework.org/schema/osgi-compendium http://www.springframework.org/schema/osgi-compendium/spring-osgi-compendium.xsd">
+   
+    <camelContext id="ctx-BT_route" messageHistory="true"
+        trace="false" typeConverterStatisticsEnabled="true"
+        useMDCLogging="true" xmlns="http://camel.apache.org/schema/spring">
+        <propertyPlaceholder id="propertiesRef" location="ref:props"/>
+        <endpoint id="rsServerEndpoint" uri="cxfrs://bean://restServer">
+            <property key="bindingStyle" value="SimpleConsumer"/>
+            <property key="loggingFeatureEnabled" value="{{rest.server.loggingFeatureEnabled}}"/>
+        </endpoint>
+        <onException id="CustomExceptionHandling">
+            <description/>
+            <exception>java.lang.Exception</exception>
+            <handled>
+                <constant>true</constant>
+            </handled>
+            <log id="logBodyRequest" loggerRef="route-log"
+                loggingLevel="ERROR" message="Exception: ${exception.message}, StackTrace: ${exception.stacktrace}"/>
+            <to pattern="InOnly" uri="direct:CorreoSoporte"/>
+        </onException>
+        <onException>
+            <exception>java.sql.SQLException</exception>
+            <redeliveryPolicy maximumRedeliveries="3"
+                redeliveryDelay="3000" retriesExhaustedLogLevel="TRACE" retryAttemptedLogLevel="TRACE"/>
+            <handled>
+                <constant>true</constant>
+            </handled>
+            <log loggerRef="route-log" loggingLevel="ERROR" message="Headers: ${headers}"/>
+            <log loggerRef="route-log" loggingLevel="ERROR" message="Exception Message: ${exception.message}"/>
+            <log loggerRef="route-log" loggingLevel="ERROR" message="Exception Stack: ${exception.stacktrace}"/>
+            <setProperty propertyName="errorMessage">
+                <simple>${exception.stacktrace}</simple>
+            </setProperty>
+            <to pattern="InOnly" uri="direct:CorreoSoporte"/>
+            <log loggerRef="route-log" loggingLevel="ERROR" message="Response error: ${body}"/>
+        </onException>
+        <onException>
+            <exception>java.sql.SQLIntegrityConstraintViolationException</exception>
+            <log loggerRef="route-log" loggingLevel="ERROR" message="Error insertando el identifier en la base de datos (Dato requerido Null)"/>
+            <log loggerRef="route-log" loggingLevel="ERROR" message="Exception Message: ${exception.message}"/>
+            <to pattern="InOnly" uri="direct:CorreoSoporte"/>
+        </onException>
+        <restConfiguration bindingMode="off" component="servlet" contextPath="/api/rest" port="8083">
+            <componentProperty key="servletName" value="OrderServlet"/>
+            <dataFormatProperty key="prettyPrint" value="true"/>
+        </restConfiguration>
+        <rest path="/order">
+            <get bindingMode="json" produces="application/json" type="com.demo.GetRequest" uri="/get">
+                <to uri="direct:order"/>
+            </get>
+            <post bindingMode="json" produces="application/json" type="com.demo.PostRequest" uri="/post">
+                <description>Test POST request</description>
+                <param name="body" type="body" description="The user to update or create"/>
+                <to uri="direct:updateOrder-close"/>
+            </post>
+        </rest>
+        <route id="ROUTE_BT_route" trace="true">
+            <from id="_from1" uri="{{identifier.queue.from}}"/>
+            <log id="_log1" loggerRef="route-log" loggingLevel="INFO" message=":::: INICIA LA RUTA route :::::"/>
+            <choice id="_choice1">
+                <when id="_when1">
+                    <simple>${body} != ''</simple>
+                    <setProperty id="_setProperty1" propertyName="xmlFromQueue">
+                        <simple>${body}</simple>
+                    </setProperty>
+                    <log id="_log2" loggerRef="route-log"
+                        loggingLevel="INFO" message="Mensaje de AMQ: \n ${property.xmlFromQueue}"/>
+                    <setHeader name="identifier" id="_setHeader1">
+                        <xpath resultType="java.lang.String" saxon="true">//example</xpath>
+                    </setHeader>
+                    <log id="_log3"  loggerRef="route-log"
+                        loggingLevel="INFO" message="identifier para realizar la consulta: ${header.identifier}"/>
+                    <unmarshal id="_unmarshal1">
+                        <description>UnMarshalling</description>
+                        <jaxb
+                            contextPath="com.avianca.route.rest.dto" prettyPrint="true"/>
+                    </unmarshal>
+                    <setHeader name="unmarshall">
+                        <simple>${body}</simple>
+                    </setHeader>
+                    <log id="_log4" loggerRef="route-log"
+                        loggingLevel="INFO" message="Consulta a realizar: \n {{sql.query.route.select}} con identifier = ${header.identifier}"/>
+                    <to id="_to1" uri="sql:{{sql.query.route.select}}"/>
+                    <choice id="_choice2">
+                        <when id="_when2">
+                            <simple>${bodyAs(String)} != '[]'</simple>
+                            <setProperty id="_setProperty2" propertyName="bodySql">
+                                <simple>${body[0]}</simple>
+                            </setProperty>
+                            <setBody id="_setBody1">
+                                <simple>${header.unmarshall}</simple>
+                            </setBody>
+                            <log id="_log5" loggerRef="route-log"
+                                loggingLevel="INFO" message="Procesamiento para la data recibida"/>
+                            <process id="_process1" ref="mappingSqlProcessor"/>
+                            <log id="_log6" loggerRef="route-log"
+                                loggingLevel="INFO" message="Headers query: ${header.queryUpdate} "/>
+                            <log id="_log7" loggerRef="route-log"
+                                loggingLevel="INFO" message="++ ${header.identifier} ++"/>
+                            <to id="_to2" uri="jdbc://dsroute"/>
+                            <log id="_log8" loggerRef="route-log"
+                                loggingLevel="INFO" message="Update count es ${header.CamelJdbcUpdateCount}"/>
+                            <log id="_log9" loggerRef="route-log"
+                                loggingLevel="INFO" message="Se realizó el Update Exitosamente"/>
+                            <setHeader headerName="legDetLog" id="_setHeader3">
+                                <simple resultType="String">${property.xmlFromQueue}</simple>
+                            </setHeader>
+                            <to id="_to3" uri="sql:{{sql.query.route.insert}}"/>
+                            <log id="_log10" loggerRef="route-log"
+                                loggingLevel="INFO" message="Se realizó el Insert en Exitosamente"/>
+                        </when>
+                        <otherwise id="_otherwise1">
+                            <description>Insert Nuevo registro en BD</description>
+                            <setBody id="_setBody2">
+                                <simple>${header.unmarshall}</simple>
+                            </setBody>
+                            <log id="_log11" loggerRef="route-log"
+                                loggingLevel="INFO" message="No existe data en BD se realizara Insert"/>
+                            <log id="_log12" loggerRef="route-log"
+                                loggingLevel="INFO" message="Inicia proceso para inserción"/>
+                            <process id="_process3" ref="mappingProcessor"/>
+                            <log id="_log13" loggerRef="route-log"
+                                loggingLevel="INFO" message="Insert BD: \n {{sql.query.route.insert}}"/>
+                            <to id="_to4" uri="sql:{{sql.query.route.insert}}"/>
+                            <log id="_log14" loggerRef="route-log"
+                                loggingLevel="INFO" message="Se realizó el Insert Exitosamente"/>
+                            <setHeader headerName="legDetLog" id="_setHeader4">
+                                <simple resultType="String">${property.xmlFromQueue}</simple>
+                            </setHeader>
+                            <to id="_to5" uri="sql:{{sql.query.route.insert.legdet}}"/>
+                            <log id="_log15" loggerRef="route-log"
+                                loggingLevel="INFO" message="Se realizó el Insert en Exitosamente"/>
+                        </otherwise>
+                    </choice>
+                </when>
+                <otherwise id="_otherwise2">
+                    <log id="_log16" loggerRef="route-log"
+                        loggingLevel="ERROR" message="No existe mensaje de entrada"/>
+                </otherwise>
+            </choice>
+            <log id="_log17" loggerRef="route-log"
+                loggingLevel="INFO" message=":::::RUTA route FINALIZADA EXITOSAMENTE::::"/>
+        </route>
+        <route id="MailNotification">
+            <from id="_from2" uri="direct:CorreoSoporte"/>
+            <log id="_log18" loggerRef="route-log"
+                loggingLevel="DEBUG" message="Notificando el Error => ${property.errorMessage}"/>
+            <setHeader headerName="DescripcionError" id="_setHeader5">
+                <simple>${property.errorMessage}</simple>
+            </setHeader>
+            <setHeader headerName="NombreServicio" id="NombreServicio">
+                <simple>{{application.service.name}}</simple>
+            </setHeader>
+            <setHeader headerName="TipoServicio" id="TipoServicio">
+                <simple>{{application.service.type}}</simple>
+            </setHeader>
+            <setProperty id="_setProperty12" propertyName="mailTo">
+                <simple>{{email.to}}</simple>
+            </setProperty>
+            <setProperty id="_setProperty13" propertyName="mailFrom">
+                <simple>{{email.from}}</simple>
+            </setProperty>
+            <setProperty id="_setProperty14" propertyName="mailSubject">
+                <simple>{{email.subject}}</simple>
+            </setProperty>
+            <setProperty id="_setProperty15" propertyName="mailTemplate">
+                <constant>{{email.template.send.notification}}</constant>
+            </setProperty>
+            <process id="_process2" ref="prepareMailingNotificationProcessor">
+                <description>Create request to send to notification queue</description>
+            </process>
+            <log id="_log35" loggerRef="route-log"
+                loggingLevel="WARN" message="Enviando mensaje a la JMS de Notificaciones: ${body}"/>
+            <inOnly id="_inOnly1" uri="{{mail.notification.queue.name}}"/>
+        </route>
+        <route>
+            <from uri="direct:do-try-test"/>
+            <doTry>
+                <doTry>
+                    <throwException id="throwException1" message="Forced" exceptionType="java.lang.IllegalArgumentException"/>
+                    <doCatch id="doCatch1">
+                        <log id="log1" message="doCatch 1"/>
+                        <throwException id="throwException2" message="Forced" exceptionType="java.lang.IllegalArgumentException"/>
+                    </doCatch>
+                </doTry>
+                <doCatch id="doCatch2">
+                    <log id="log2" message="doCatch 2"/>
+                </doCatch>
+                <doCatch>
+                    <onWhen>
+                        <simple>${exception.message} contains 'foo'</simple>
+                    </onWhen>
+                    <log id="log2" message="doCatch 3"/>
+                </doCatch>
+                <doFinally>
+                    <log id="log2" message="doFinally"/>
+                </doFinally>
+            </doTry>
+        </route>
+    </camelContext>
+</beans>
